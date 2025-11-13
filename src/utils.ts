@@ -17,20 +17,33 @@ export function generateR2Key(taskId: string, pi: string): string {
 }
 
 /**
- * Create JSON response helper
+ * CORS headers helper
  */
-export function jsonResponse(data: any, status: number = 200): Response {
+export function corsHeaders(origin?: string): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400', // 24 hours
+  };
+}
+
+/**
+ * Create JSON response helper with CORS
+ */
+export function jsonResponse(data: any, status: number = 200, origin?: string): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
+      ...corsHeaders(origin),
     },
   });
 }
 
 /**
- * Create error response helper
+ * Create error response helper with CORS
  */
-export function errorResponse(message: string, status: number = 500): Response {
-  return jsonResponse({ error: message }, status);
+export function errorResponse(message: string, status: number = 500, origin?: string): Response {
+  return jsonResponse({ error: message }, status, origin);
 }

@@ -35,13 +35,29 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    const origin = request.headers.get('Origin') || undefined;
+
+    // ========================================================================
+    // CORS Preflight Handler
+    // ========================================================================
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': origin || '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
 
     // ========================================================================
     // ENDPOINT 1: Create Export Job
     // POST /export/mods
     // ========================================================================
     if (path === '/export/mods' && request.method === 'POST') {
-      return handleExportRequest(request, env);
+      return handleExportRequest(request, env, origin);
     }
 
     // ========================================================================
@@ -50,7 +66,7 @@ export default {
     // ========================================================================
     if (path.startsWith('/status/') && request.method === 'GET') {
       const taskId = path.split('/')[2];
-      return handleStatusRequest(taskId, env);
+      return handleStatusRequest(taskId, env, origin);
     }
 
     // ========================================================================
@@ -59,7 +75,7 @@ export default {
     // ========================================================================
     if (path.startsWith('/callback/') && request.method === 'POST') {
       const taskId = path.split('/')[2];
-      return handleCallback(taskId, request, env);
+      return handleCallback(taskId, request, env, origin);
     }
 
     // ========================================================================
@@ -68,7 +84,7 @@ export default {
     // ========================================================================
     if (path.startsWith('/download/') && request.method === 'GET') {
       const taskId = path.split('/')[2];
-      return handleDownload(taskId, env);
+      return handleDownload(taskId, env, origin);
     }
 
     // ========================================================================
@@ -76,13 +92,13 @@ export default {
     // GET /health
     // ========================================================================
     if (path === '/health' && request.method === 'GET') {
-      return jsonResponse({ status: 'ok', service: 'arke-export-orchestrator' });
+      return jsonResponse({ status: 'ok', service: 'arke-export-orchestrator' }, 200, origin);
     }
 
     // ========================================================================
     // 404 - Not Found
     // ========================================================================
-    return errorResponse('Not found', 404);
+    return errorResponse('Not found', 404, origin);
   },
 };
 
@@ -99,7 +115,7 @@ export default {
  * 4. Store task state in KV
  * 5. Return task ID to client
  */
-async function handleExportRequest(request: Request, env: Env): Promise<Response> {
+async function handleExportRequest(request: Request, env: Env, origin?: string): Promise<Response> {
   try {
     // Parse request body
     const body: ExportRequest = await request.json();
@@ -107,7 +123,7 @@ async function handleExportRequest(request: Request, env: Env): Promise<Response
 
     // Validate required fields
     if (!pi) {
-      return errorResponse('Missing required field: pi', 400);
+      return errorResponse('Missing required field: pi', 400, origin);
     }
 
     // Generate unique task ID
@@ -158,10 +174,10 @@ async function handleExportRequest(request: Request, env: Env): Promise<Response
 
     console.log(`[Export] Task ${taskId} created, machine ${machineId} spawned`);
 
-    return jsonResponse(response);
+    return jsonResponse(response, 200, origin);
   } catch (error: any) {
     console.error('[Export] Error:', error);
-    return errorResponse(error.message || 'Failed to start export job');
+    return errorResponse(error.message || 'Failed to start export job', 500, origin);
   }
 }
 
@@ -170,7 +186,7 @@ async function handleExportRequest(request: Request, env: Env): Promise<Response
  *
  * Return current task state from Durable Object
  */
-async function handleStatusRequest(taskId: string, env: Env): Promise<Response> {
+async function handleStatusRequest(taskId: string, env: Env, origin?: string): Promise<Response> {
   try {
     // Get DO stub for this task
     const id = env.TASK_STORE.idFromName(taskId);
@@ -180,7 +196,7 @@ async function handleStatusRequest(taskId: string, env: Env): Promise<Response> 
     const taskState: TaskState | null = await doResponse.json();
 
     if (!taskState) {
-      return errorResponse('Task not found', 404);
+      return errorResponse('Task not found', 404, origin);
     }
 
     // Build status response
@@ -197,10 +213,10 @@ async function handleStatusRequest(taskId: string, env: Env): Promise<Response> 
       error: taskState.error,
     };
 
-    return jsonResponse(response);
+    return jsonResponse(response, 200, origin);
   } catch (error: any) {
     console.error('[Status] Error:', error);
-    return errorResponse(error.message || 'Failed to get task status');
+    return errorResponse(error.message || 'Failed to get task status', 500, origin);
   }
 }
 
@@ -213,7 +229,8 @@ async function handleStatusRequest(taskId: string, env: Env): Promise<Response> 
 async function handleCallback(
   taskId: string,
   request: Request,
-  env: Env
+  env: Env,
+  origin?: string
 ): Promise<Response> {
   try {
     // Parse callback payload
@@ -234,7 +251,7 @@ async function handleCallback(
     return jsonResponse({ received: true });
   } catch (error: any) {
     console.error('[Callback] Error:', error);
-    return errorResponse(error.message || 'Failed to process callback');
+    return errorResponse(error.message || 'Failed to process callback', 500, origin);
   }
 }
 
@@ -243,7 +260,7 @@ async function handleCallback(
  *
  * Stream export result from R2 to client
  */
-async function handleDownload(taskId: string, env: Env): Promise<Response> {
+async function handleDownload(taskId: string, env: Env, origin?: string): Promise<Response> {
   try {
     // Get task state from Durable Object
     const id = env.TASK_STORE.idFromName(taskId);
@@ -253,20 +270,21 @@ async function handleDownload(taskId: string, env: Env): Promise<Response> {
     const taskState: TaskState | null = await doResponse.json();
 
     if (!taskState) {
-      return errorResponse('Task not found', 404);
+      return errorResponse('Task not found', 404, origin);
     }
 
     // Check if task is complete
     if (taskState.status !== 'success') {
       return errorResponse(
         `Export not ready or failed. Status: ${taskState.status}`,
-        400
+        400,
+        origin
       );
     }
 
     // Check if we have R2 key
     if (!taskState.output_r2_key) {
-      return errorResponse('Export file not available', 500);
+      return errorResponse('Export file not available', 500, origin);
     }
 
     console.log(`[Download] Streaming ${taskState.output_r2_key} for task ${taskId}`);
@@ -276,19 +294,20 @@ async function handleDownload(taskId: string, env: Env): Promise<Response> {
 
     if (!r2Object) {
       console.error(`[Download] File not found in R2: ${taskState.output_r2_key}`);
-      return errorResponse('Export file not found in storage', 404);
+      return errorResponse('Export file not found in storage', 404, origin);
     }
 
-    // Stream to client
+    // Stream to client with CORS headers
     return new Response(r2Object.body, {
       headers: {
         'Content-Type': 'application/xml',
         'Content-Disposition': `attachment; filename="${taskState.output_file_name}"`,
         'Content-Length': taskState.output_file_size?.toString() || '',
+        'Access-Control-Allow-Origin': origin || '*',
       },
     });
   } catch (error: any) {
     console.error('[Download] Error:', error);
-    return errorResponse(error.message || 'Failed to download export');
+    return errorResponse(error.message || 'Failed to download export', 500, origin);
   }
 }
