@@ -1,0 +1,3 @@
+# Fly.io API Token (deploy token for arke-mods-export-worker app)
+# Create with: fly tokens create deploy --app arke-mods-export-worker
+FLY_API_TOKEN="your_fly_api_token_here"

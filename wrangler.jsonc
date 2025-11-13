@@ -1,0 +1,45 @@
+{
+  "name": "arke-export-orchestrator",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-11-13",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "workers_dev": true,
+
+  // KV namespace for task state
+  "kv_namespaces": [
+    {
+      "binding": "TASK_STORE",
+      "id": "ca33180e079f419b9ea0925beb70fc0f",
+      "preview_id": "fabc9c4a1bcc465e898ec3460f5a9c68"
+    }
+  ],
+
+  // R2 bucket binding for downloading exports
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "arke-exports",
+      "preview_bucket_name": "arke-exports-preview"
+    }
+  ],
+
+  // Environment variables (non-secret)
+  "vars": {
+    "FLY_APP_NAME": "arke-mods-export-worker",
+    "FLY_REGION": "ord",
+    "FLY_WORKER_IMAGE": "registry.fly.io/arke-mods-export-worker:deployment-01K9Z8WHQ1RZE9S7BJYXGHAR5R",
+    "WORKER_MEMORY_MB": "1024",
+    "WORKER_CPUS": "2"
+  },
+
+  // Secrets (set via: wrangler secret put <NAME>)
+  // FLY_API_TOKEN - Fly.io API token for spawning machines
+
+  "routes": [
+    {
+      "pattern": "export.arke.institute",
+      "custom_domain": true
+    }
+  ]
+}
