@@ -77,6 +77,7 @@ export interface ExportMetrics {
   total_time_ms: number;
   entities_exported: number;
   entities_failed: number;
+  entities_incomplete?: number;  // Records exported with minimal metadata (missing PINAX)
   peak_memory_mb: number;
 }
 
