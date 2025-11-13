@@ -28,6 +28,9 @@ import type {
 import { spawnExportMachine } from './fly';
 import { generateTaskId, jsonResponse, errorResponse } from './utils';
 
+// Export Durable Object for Wrangler
+export { TaskStore } from './task-store';
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -126,7 +129,7 @@ async function handleExportRequest(request: Request, env: Env): Promise<Response
       exportOptions: options || {},
     });
 
-    // Store initial task state in KV
+    // Store initial task state in Durable Object
     const taskState: TaskState = {
       task_id: taskId,
       batch_id: batchId,
@@ -138,8 +141,12 @@ async function handleExportRequest(request: Request, env: Env): Promise<Response
       created_at: Date.now(),
     };
 
-    await env.TASK_STORE.put(taskId, JSON.stringify(taskState), {
-      expirationTtl: 3600, // 1 hour expiration for processing tasks
+    // Get DO stub for this task
+    const id = env.TASK_STORE.idFromName(taskId);
+    const stub = env.TASK_STORE.get(id);
+    await stub.fetch('https://task-store/create', {
+      method: 'POST',
+      body: JSON.stringify(taskState),
     });
 
     // Return task ID to client
@@ -161,17 +168,20 @@ async function handleExportRequest(request: Request, env: Env): Promise<Response
 /**
  * Handle GET /status/:taskId
  *
- * Return current task state from KV
+ * Return current task state from Durable Object
  */
 async function handleStatusRequest(taskId: string, env: Env): Promise<Response> {
   try {
-    const taskData = await env.TASK_STORE.get(taskId);
+    // Get DO stub for this task
+    const id = env.TASK_STORE.idFromName(taskId);
+    const stub = env.TASK_STORE.get(id);
 
-    if (!taskData) {
+    const doResponse = await stub.fetch(`https://task-store/get?taskId=${taskId}`);
+    const taskState: TaskState | null = await doResponse.json();
+
+    if (!taskState) {
       return errorResponse('Task not found', 404);
     }
-
-    const taskState: TaskState = JSON.parse(taskData);
 
     // Build status response
     const response: StatusResponse = {
@@ -198,7 +208,7 @@ async function handleStatusRequest(taskId: string, env: Env): Promise<Response> 
  * Handle POST /callback/:taskId
  *
  * Receive callback from Fly.io worker with results
- * Update task state in KV
+ * Update task state in Durable Object
  */
 async function handleCallback(
   taskId: string,
@@ -211,34 +221,14 @@ async function handleCallback(
 
     console.log(`[Callback] Received callback for task ${taskId}, status: ${callback.status}`);
 
-    // Get existing task state
-    const existingData = await env.TASK_STORE.get(taskId);
+    // Get DO stub for this task
+    const id = env.TASK_STORE.idFromName(taskId);
+    const stub = env.TASK_STORE.get(id);
 
-    if (!existingData) {
-      console.warn(`[Callback] Task ${taskId} not found in KV`);
-      return errorResponse('Task not found', 404);
-    }
-
-    const taskState: TaskState = JSON.parse(existingData);
-
-    // Update task state with callback data
-    taskState.status = callback.status;
-    taskState.completed_at = Date.now();
-
-    if (callback.status === 'success') {
-      taskState.output_r2_key = callback.output_r2_key;
-      taskState.output_file_name = callback.output_file_name;
-      taskState.output_file_size = callback.output_file_size;
-      taskState.metrics = callback.metrics;
-      console.log(`[Callback] Task ${taskId} succeeded: ${callback.output_file_name}`);
-    } else {
-      taskState.error = callback.error;
-      console.error(`[Callback] Task ${taskId} failed: ${callback.error}`);
-    }
-
-    // Store updated state with longer TTL (24 hours for completed tasks)
-    await env.TASK_STORE.put(taskId, JSON.stringify(taskState), {
-      expirationTtl: 86400, // 24 hours
+    // Update task with callback data
+    await stub.fetch('https://task-store/complete', {
+      method: 'POST',
+      body: JSON.stringify({ taskId, callback }),
     });
 
     return jsonResponse({ received: true });
@@ -255,14 +245,16 @@ async function handleCallback(
  */
 async function handleDownload(taskId: string, env: Env): Promise<Response> {
   try {
-    // Get task state
-    const taskData = await env.TASK_STORE.get(taskId);
+    // Get task state from Durable Object
+    const id = env.TASK_STORE.idFromName(taskId);
+    const stub = env.TASK_STORE.get(id);
 
-    if (!taskData) {
+    const doResponse = await stub.fetch(`https://task-store/get?taskId=${taskId}`);
+    const taskState: TaskState | null = await doResponse.json();
+
+    if (!taskState) {
       return errorResponse('Task not found', 404);
     }
-
-    const taskState: TaskState = JSON.parse(taskData);
 
     // Check if task is complete
     if (taskState.status !== 'success') {

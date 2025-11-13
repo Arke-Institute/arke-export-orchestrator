@@ -9,12 +9,18 @@
     "tail": "wrangler tail",
     "test": "vitest"
   },
-  "keywords": ["cloudflare", "worker", "arke", "export", "orchestrator"],
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "arke",
+    "export",
+    "orchestrator"
+  ],
   "author": "Arke Institute",
   "license": "MIT",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",
     "typescript": "^5.7.2",
-    "wrangler": "^3.94.0"
+    "wrangler": "^4.48.0"
   }
 }

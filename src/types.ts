@@ -4,7 +4,7 @@
 
 export interface Env {
   // Bindings
-  TASK_STORE: KVNamespace;
+  TASK_STORE: DurableObjectNamespace;
   R2_BUCKET: R2Bucket;
 
   // Secrets

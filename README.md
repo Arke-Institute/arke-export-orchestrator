@@ -2,6 +2,8 @@
 
 Cloudflare Worker that orchestrates MODS export jobs by spawning ephemeral Fly.io machines.
 
+DEPLOYED AT: https://export.arke.institute
+
 ## Architecture
 
 ```

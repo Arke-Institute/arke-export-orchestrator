@@ -6,12 +6,22 @@
 
   "workers_dev": true,
 
-  // KV namespace for task state
-  "kv_namespaces": [
+  // Durable Objects for task state (strongly consistent storage)
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TASK_STORE",
+        "class_name": "TaskStore",
+        "script_name": "arke-export-orchestrator"
+      }
+    ]
+  },
+
+  // Migrations for Durable Objects
+  "migrations": [
     {
-      "binding": "TASK_STORE",
-      "id": "ca33180e079f419b9ea0925beb70fc0f",
-      "preview_id": "fabc9c4a1bcc465e898ec3460f5a9c68"
+      "tag": "v1",
+      "new_sqlite_classes": ["TaskStore"]
     }
   ],
 
@@ -36,10 +46,17 @@
   // Secrets (set via: wrangler secret put <NAME>)
   // FLY_API_TOKEN - Fly.io API token for spawning machines
 
-  "routes": [
-    {
-      "pattern": "export.arke.institute",
-      "custom_domain": true
+  // now handled by CNAME record
+  // "routes": [
+  //   {
+  //     "pattern": "export.arke.institute",
+  //     "custom_domain": true
+  //   }
+  // ],
+
+  "observability": {
+    "logs": {
+      "enabled": true
     }
-  ]
+  }
 }
