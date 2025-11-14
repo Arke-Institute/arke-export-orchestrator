@@ -47,12 +47,12 @@
   // FLY_API_TOKEN - Fly.io API token for spawning machines
 
   // now handled by CNAME record
-  // "routes": [
-  //   {
-  //     "pattern": "export.arke.institute",
-  //     "custom_domain": true
-  //   }
-  // ],
+  "routes": [
+    {
+      "pattern": "export.arke.institute",
+      "custom_domain": true
+    }
+  ],
 
   "observability": {
     "logs": {
