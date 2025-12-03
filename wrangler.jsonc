@@ -38,7 +38,7 @@
   "vars": {
     "FLY_APP_NAME": "arke-mods-export-worker",
     "FLY_REGION": "ord",
-    "FLY_WORKER_IMAGE": "registry.fly.io/arke-mods-export-worker:deployment-01KBJWGZ51T9B700RE8Y7WDJZ0",
+    "FLY_WORKER_IMAGE": "registry.fly.io/arke-mods-export-worker:deployment-01KBJWWDVCH9937G13GG0Y1JWM",
     "WORKER_MEMORY_MB": "1024",
     "WORKER_CPUS": "2"
   },
