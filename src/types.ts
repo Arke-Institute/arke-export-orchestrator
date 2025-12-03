@@ -24,15 +24,29 @@ export interface Env {
 
 export interface ExportRequest {
   pi: string;                  // Permanent identifier to export
-  options: ExportOptions;      // Export configuration
+  options?: ExportOptions;     // Export configuration
 }
 
+/**
+ * Export options for Pinax JSON export
+ */
 export interface ExportOptions {
-  recursive?: boolean;              // Export child entities
-  maxDepth?: number;                // Max recursion depth
-  parallelBatchSize?: number;       // Parallel processing batch size
-  includeOcr?: boolean;             // Include OCR text
-  cheimarrosMode?: 'full' | 'minimal' | 'skip';  // Cheimarros metadata mode
+  // Recursion
+  recursive?: boolean;              // Export child entities (default: false)
+  maxDepth?: number;                // Max recursion depth (default: 10, max: 50)
+
+  // Content filtering
+  includeOcr?: boolean;             // Include OCR text (default: true)
+  maxTextLength?: number;           // Truncate large texts (default: 100000 chars)
+
+  // Entity data source
+  entitySource?: 'graphdb' | 'cheimarros' | 'both';  // Default: 'graphdb'
+
+  // Component filtering
+  includeComponents?: boolean;      // Include component list (default: true)
+
+  // Processing
+  parallelBatchSize?: number;       // Parallel processing batch size (default: 10)
 }
 
 // ============================================================================

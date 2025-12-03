@@ -74,7 +74,8 @@ export class TaskStore {
       }
 
       if (path === '/complete' && request.method === 'POST') {
-        const { taskId, callback } = await request.json();
+        const body = await request.json() as { taskId: string; callback: CallbackPayload };
+        const { taskId, callback } = body;
         await this.completeTask(taskId, callback);
         return new Response(JSON.stringify({ success: true }), {
           headers: { 'Content-Type': 'application/json' },

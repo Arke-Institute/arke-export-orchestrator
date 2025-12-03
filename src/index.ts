@@ -1,20 +1,17 @@
 /**
  * Arke Export Orchestrator
  *
- * Cloudflare Worker that orchestrates MODS export jobs by:
+ * Cloudflare Worker that orchestrates Pinax JSON export jobs by:
  * 1. Receiving export requests from clients
  * 2. Spawning ephemeral Fly.io machines to perform exports
  * 3. Receiving callbacks from workers with results
  * 4. Streaming completed exports from R2 to clients
  *
- * Flow:
- * Client → POST /export/mods → Orchestrator → Fly.io Machine
- *   ↓
- * GET /status/:taskId (polling)
- *   ↓
- * Fly Machine → POST /callback/:taskId → Orchestrator
- *   ↓
- * Client → GET /download/:taskId → Orchestrator → R2 → Client
+ * Endpoints:
+ * - POST /export - Create export job
+ * - GET  /status/:taskId - Check export status
+ * - POST /callback/:taskId - Receive worker callback
+ * - GET  /download/:taskId - Download completed export
  */
 
 import type {
@@ -54,9 +51,9 @@ export default {
 
     // ========================================================================
     // ENDPOINT 1: Create Export Job
-    // POST /export/mods
+    // POST /export
     // ========================================================================
-    if (path === '/export/mods' && request.method === 'POST') {
+    if (path === '/export' && request.method === 'POST') {
       return handleExportRequest(request, env, origin);
     }
 
@@ -107,15 +104,19 @@ export default {
 // ============================================================================
 
 /**
- * Handle POST /export/mods
+ * Handle POST /export
  *
  * 1. Validate request
  * 2. Generate task ID
  * 3. Spawn Fly.io machine
- * 4. Store task state in KV
+ * 4. Store task state in Durable Object
  * 5. Return task ID to client
  */
-async function handleExportRequest(request: Request, env: Env, origin?: string): Promise<Response> {
+async function handleExportRequest(
+  request: Request,
+  env: Env,
+  origin?: string
+): Promise<Response> {
   try {
     // Parse request body
     const body: ExportRequest = await request.json();
@@ -297,10 +298,10 @@ async function handleDownload(taskId: string, env: Env, origin?: string): Promis
       return errorResponse('Export file not found in storage', 404, origin);
     }
 
-    // Stream to client with CORS headers
+    // Stream to client with CORS headers (JSON format)
     return new Response(r2Object.body, {
       headers: {
-        'Content-Type': 'application/xml',
+        'Content-Type': 'application/json',
         'Content-Disposition': `attachment; filename="${taskState.output_file_name}"`,
         'Content-Length': taskState.output_file_size?.toString() || '',
         'Access-Control-Allow-Origin': origin || '*',

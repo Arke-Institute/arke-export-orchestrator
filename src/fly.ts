@@ -36,7 +36,6 @@ export async function spawnExportMachine(
         // Task identification
         TASK_ID: taskId,
         PI: pi,
-        EXPORT_FORMAT: 'mods',
         BATCH_ID: batchId,
 
         // Export options (as JSON string)
