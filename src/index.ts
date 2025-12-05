@@ -93,6 +93,14 @@ export default {
     }
 
     // ========================================================================
+    // ENDPOINT 6: JSON Schema
+    // GET /schemas/export/v1
+    // ========================================================================
+    if (path === '/schemas/export/v1' && request.method === 'GET') {
+      return handleSchema(origin);
+    }
+
+    // ========================================================================
     // 404 - Not Found
     // ========================================================================
     return errorResponse('Not found', 404, origin);
@@ -311,4 +319,229 @@ async function handleDownload(taskId: string, env: Env, origin?: string): Promis
     console.error('[Download] Error:', error);
     return errorResponse(error.message || 'Failed to download export', 500, origin);
   }
+}
+
+/**
+ * Handle GET /schemas/export/v1
+ *
+ * Returns the JSON Schema for Pinax exports
+ */
+function handleSchema(origin?: string): Response {
+  const schema = {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: 'https://export.arke.institute/schemas/export/v1',
+    title: 'Pinax Export',
+    description: 'Arke Institute Pinax JSON export format',
+    type: 'object',
+    required: ['$schema', 'version', 'exported_at', 'export_options', 'root'],
+    properties: {
+      $schema: {
+        type: 'string',
+        const: 'https://export.arke.institute/schemas/export/v1',
+      },
+      version: {
+        type: 'string',
+        const: '1.0.0',
+      },
+      exported_at: {
+        type: 'string',
+        format: 'date-time',
+        description: 'ISO 8601 timestamp of when the export was created',
+      },
+      export_options: {
+        $ref: '#/$defs/ExportOptions',
+      },
+      root: {
+        $ref: '#/$defs/Entity',
+      },
+    },
+    $defs: {
+      ExportOptions: {
+        type: 'object',
+        properties: {
+          recursive: { type: 'boolean', default: false },
+          maxDepth: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
+          includeOcr: { type: 'boolean', default: true },
+          maxTextLength: { type: 'integer', default: 100000 },
+          entitySource: {
+            type: 'string',
+            enum: ['none', 'graphdb', 'cheimarros', 'both'],
+            default: 'graphdb',
+          },
+          includeComponents: { type: 'boolean', default: true },
+          componentTypes: {
+            type: 'array',
+            items: {
+              type: 'string',
+              enum: ['ref', 'pinax', 'description', 'cheimarros', 'other'],
+            },
+          },
+          parallelBatchSize: { type: 'integer', default: 10 },
+        },
+      },
+      Entity: {
+        type: 'object',
+        required: ['pi', 'manifest_cid', 'ver', 'ts', 'depth', 'pinax', 'description'],
+        properties: {
+          pi: { type: 'string', description: 'Permanent identifier' },
+          manifest_cid: { type: 'string', description: 'IPFS CID of the manifest' },
+          ver: { type: 'integer', description: 'Version number' },
+          ts: { type: 'string', format: 'date-time', description: 'Timestamp' },
+          parent_pi: { type: 'string', description: 'Parent entity PI' },
+          depth: { type: 'integer', description: 'Depth in the export tree' },
+          pinax: {
+            oneOf: [{ $ref: '#/$defs/PinaxMetadata' }, { type: 'null' }],
+          },
+          description: {
+            oneOf: [{ type: 'string' }, { type: 'null' }],
+          },
+          description_truncated: { type: 'boolean' },
+          entities: {
+            type: 'array',
+            items: { $ref: '#/$defs/LinkedEntity' },
+          },
+          relationships: {
+            type: 'array',
+            items: { $ref: '#/$defs/LinkedRelationship' },
+          },
+          cheimarros: { $ref: '#/$defs/CheimarrosGraph' },
+          components: {
+            type: 'array',
+            items: { $ref: '#/$defs/Component' },
+          },
+          children: {
+            type: 'array',
+            items: { $ref: '#/$defs/Entity' },
+          },
+          children_count: { type: 'integer' },
+        },
+      },
+      PinaxMetadata: {
+        type: 'object',
+        required: ['id', 'title', 'type', 'creator', 'institution', 'created', 'access_url'],
+        properties: {
+          id: { type: 'string' },
+          title: { type: 'string' },
+          type: {
+            type: 'string',
+            enum: [
+              'Collection', 'Dataset', 'Event', 'Image', 'InteractiveResource',
+              'MovingImage', 'PhysicalObject', 'Service', 'Software', 'Sound',
+              'StillImage', 'Text',
+            ],
+          },
+          creator: {
+            oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+          },
+          institution: { type: 'string' },
+          created: { type: 'string' },
+          access_url: { type: 'string', format: 'uri' },
+          language: { type: 'string' },
+          subjects: { type: 'array', items: { type: 'string' } },
+          description: { type: 'string' },
+          source: { type: 'string' },
+          rights: { type: 'string' },
+          place: {
+            oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+          },
+        },
+      },
+      LinkedEntity: {
+        type: 'object',
+        required: ['canonical_id', 'code', 'label', 'type', 'url'],
+        properties: {
+          canonical_id: { type: 'string' },
+          code: { type: 'string' },
+          label: { type: 'string' },
+          type: { type: 'string' },
+          url: { type: 'string', format: 'uri' },
+          properties: { type: 'object' },
+          created_by_pi: { type: 'string' },
+          source_pis: { type: 'array', items: { type: 'string' } },
+          first_seen: { type: 'string' },
+          last_updated: { type: 'string' },
+        },
+      },
+      LinkedRelationship: {
+        type: 'object',
+        required: ['subject_id', 'predicate', 'object_id', 'source_pi'],
+        properties: {
+          subject_id: { type: 'string' },
+          predicate: { type: 'string' },
+          object_id: { type: 'string' },
+          subject_label: { type: 'string' },
+          object_label: { type: 'string' },
+          source_pi: { type: 'string' },
+          properties: { type: 'object' },
+          created_at: { type: 'string' },
+        },
+      },
+      CheimarrosGraph: {
+        type: 'object',
+        required: ['entities'],
+        properties: {
+          entities: {
+            type: 'object',
+            additionalProperties: { $ref: '#/$defs/CheimarrosEntity' },
+          },
+          relations: {
+            type: 'array',
+            items: { $ref: '#/$defs/CheimarrosRelation' },
+          },
+        },
+      },
+      CheimarrosEntity: {
+        type: 'object',
+        required: ['type', 'label'],
+        properties: {
+          type: { type: 'string' },
+          label: { type: 'string' },
+          properties: { type: 'object' },
+          source: { type: 'string' },
+        },
+      },
+      CheimarrosRelation: {
+        type: 'object',
+        required: ['source', 'target', 'type'],
+        properties: {
+          source: { type: 'string' },
+          target: { type: 'string' },
+          type: { type: 'string' },
+          properties: { type: 'object' },
+        },
+      },
+      Component: {
+        type: 'object',
+        required: ['key', 'cid', 'url', 'type'],
+        properties: {
+          key: { type: 'string' },
+          cid: { type: 'string' },
+          url: { type: 'string', format: 'uri' },
+          type: {
+            type: 'string',
+            enum: ['ref', 'pinax', 'description', 'cheimarros', 'other'],
+          },
+          ref: {
+            type: 'object',
+            required: ['mime_type', 'size', 'cdn_url'],
+            properties: {
+              mime_type: { type: 'string' },
+              size: { type: 'integer' },
+              cdn_url: { type: 'string', format: 'uri' },
+              ocr_text: { type: 'string' },
+              ocr_truncated: { type: 'boolean' },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  return new Response(JSON.stringify(schema, null, 2), {
+    headers: {
+      'Content-Type': 'application/schema+json',
+      'Access-Control-Allow-Origin': origin || '*',
+      'Cache-Control': 'public, max-age=86400',
+    },
+  });
 }
